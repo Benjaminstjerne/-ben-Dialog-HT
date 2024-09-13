@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dialogens Symfoni</title>
+    <title>Dialogens Levende Væv</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; }
         canvas { display: block; }
@@ -51,11 +51,15 @@
             geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
 
+            const textureLoader = new THREE.TextureLoader();
+            const particleTexture = textureLoader.load('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAA7EAAAOxAGVKw4bAAADTUlEQVR4nO2bP0wTURzHP3d3hVLaktaksS2GkPoHYwwD6qAMuukAcUInVwcXZVFjHHRCJtwchEQXiZOiiYMaJi0kpSb8CW0gaQstLVAo13t/h957pNdCrwn0+Pd9tte7X9/n7nfv3b17T4mPDPSTxnTcONITtJs7MoIkX72B7OpEBgIAqN4FAHJ375G8PYZx+ULVRboRk8S1W6jpDP7pmwBonhoksmms+jprZrIaMJncfQDEhfNo/gaxm/2w0y4uyADCYTTzBOrKGsHnC6j+RvyT41XvmN2YSQbWCM5Oo68uI4VEOXUkZQCAevyE1dkVpLIAYH26huZvQB0e2scsq0NKZGIXkZPJf4xVGGJfACnJrScASF8MdfF7Tl2lDLOjHXMnRnDmFfGRoZN1t6fNYIBEVzf+qQlKMcwePwFRWwPxnitoS8snGnxulL6TNYCqID2e3Ot4I2pPW85xobZdkUlRgcoSGxhG+nSUUycuPz8Jl8sQpQ0ggZMR9l10uRwiHj1WM5cvnPh4n4sqbQBF5BwPTo4gTbN6hlKAUoCq5Ox6DRMJ/h4/A4BRcP+Qmk7nvlc5KGcGKJr7mPeAf3SMzGCfjPeWg3LmAFXN2VVwLLgHoPkaSmr8tGFrgGLF9wJV78zTeBmoBgDESgKV6rW9VRTbBhDhMJn+y5BoRPU2or/7kHOc7+tGnT9bLY+2sG0Ao6MLY22D2OAwZjCIOPeKxJWrNYveFtsGMDZjaL9/AeB58w7P2zdVMaoE2wZQwjUs+FJg2wAiFEJmMqQ7O2oWfCnsz4GKQvTKIEY4TPDxU9Sns9UyKol9A6gq6sIXZFuEVIf90a4cVJ4EawTbO0HhdoPhoKOJ9cxdKs8ANYLtGVB47C0V1QCAWF5EXVnL2VWOjL8hDpkBQqbTSEMHQ3e9qXjFse9+cBQhpSTT04t/cgJx9nTFHVQa2wYwurpRl1eQzc1o3z7X3UJoaQPIjnbSnd3IcJj4yBDa9+91uRJc8p5gfHiI5K1RjAtd6D8W0X7+QjY1Vtx4NbA1Axj/VoCNeFcn/skJlLV1tB9LdbsSXBwzLwa1pSXU5VVkczNmSwvxvt6aOK0m1gZIJPC+nEf7sYTy5y+yuRkzEkF6vWQ6O0h3tNXSZ9X4B1FPAUgNm5PiAAAAAElFTkSuQmCC');
+            
             const material = new THREE.PointsMaterial({
-                color: 0xffffff,
-                size: 0.5,
+                size: 2,
+                map: particleTexture,
                 transparent: true,
-                blending: THREE.AdditiveBlending
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
             });
 
             particles = new THREE.Points(geometry, material);
@@ -94,19 +98,26 @@
             time += 0.01;
 
             for (let i = 0; i < positions.length; i += 3) {
-                // Opdater position baseret på hastighed og lydniveau
-                positions[i] += velocities[i] * (1 + audioLevel * 5);
-                positions[i + 1] += velocities[i + 1] * (1 + audioLevel * 5);
-                positions[i + 2] += velocities[i + 2] * (1 + audioLevel * 5);
+                // Lydresponsiv bevægelse
+                const push = (Math.random() - 0.5) * audioLevel * 3;
+                velocities[i] += push * 0.1;
+                velocities[i + 1] += push * 0.1;
+                velocities[i + 2] += push * 0.1;
 
-                // Tilføj bølgebevægelse
-                positions[i] += Math.sin(time + i * 0.1) * 0.2;
-                positions[i + 1] += Math.cos(time + i * 0.1) * 0.2;
+                // Opdater position baseret på hastighed
+                positions[i] += velocities[i];
+                positions[i + 1] += velocities[i + 1];
+                positions[i + 2] += velocities[i + 2];
 
                 // Hold partikler inden for synligt område
                 if (Math.abs(positions[i]) > 50) velocities[i] *= -1;
                 if (Math.abs(positions[i + 1]) > 50) velocities[i + 1] *= -1;
                 if (Math.abs(positions[i + 2]) > 50) velocities[i + 2] *= -1;
+
+                // Dæmp hastighed over tid
+                velocities[i] *= 0.99;
+                velocities[i + 1] *= 0.99;
+                velocities[i + 2] *= 0.99;
 
                 // Opret forbindelser
                 let connections = 0;
@@ -122,12 +133,6 @@
                         linePositions.push(positions[i], positions[i + 1], positions[i + 2]);
                         linePositions.push(positions[j], positions[j + 1], positions[j + 2]);
                         connections++;
-
-                        // Tilføj en lille tiltrækning mellem forbundne partikler
-                        const attraction = 0.0001 * (1 + audioLevel * 10);
-                        velocities[i] += (positions[j] - positions[i]) * attraction;
-                        velocities[i + 1] += (positions[j + 1] - positions[i + 1]) * attraction;
-                        velocities[i + 2] += (positions[j + 2] - positions[i + 2]) * attraction;
                     }
                 }
             }
@@ -146,8 +151,8 @@
             }
 
             // Tilpas partikel- og linjestørrelse baseret på lydniveau
-            particles.material.size = 0.5 + audioLevel * 3;
-            lines.material.opacity = 0.1 + audioLevel * 0.9;
+            particles.material.size = 2 + audioLevel * 3;
+            lines.material.opacity = 0.1 + audioLevel * 0.4;
 
             updateParticlesAndLines();
 
