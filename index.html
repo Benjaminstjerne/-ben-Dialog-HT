@@ -12,7 +12,7 @@
 <body>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
-        let scene, camera, renderer, particles, lines;
+        let scene, camera, renderer, particles, lines, audioIndicator;
         let audioContext, analyser, dataArray;
         const particleCount = 200;
         const maxConnections = 5;
@@ -28,6 +28,17 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
+            createParticles();
+            createLines();
+            createAudioIndicator();
+
+            camera.position.z = 500;
+
+            initAudio();
+            animate();
+        }
+
+        function createParticles() {
             const geometry = new THREE.BufferGeometry();
             const positions = new Float32Array(particleCount * 3);
             const colors = new Float32Array(particleCount * 3);
@@ -56,30 +67,43 @@
             });
             particles = new THREE.Points(geometry, material);
             scene.add(particles);
+        }
 
+        function createLines() {
             lines = new THREE.LineSegments(
                 new THREE.BufferGeometry(),
                 new THREE.LineBasicMaterial({ color: baseColor, opacity: 0.5, transparent: true })
             );
             scene.add(lines);
+        }
 
-            camera.position.z = 500;
-
-            initAudio();
-            animate();
+        function createAudioIndicator() {
+            const geometry = new THREE.CircleGeometry(20, 32);
+            const material = new THREE.MeshBasicMaterial({ color: 0xFFA500, transparent: true, opacity: 0.5 });
+            audioIndicator = new THREE.Mesh(geometry, material);
+            audioIndicator.position.set(-window.innerWidth / 2 + 30, window.innerHeight / 2 - 30, 0);
+            scene.add(audioIndicator);
         }
 
         function initAudio() {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
             analyser = audioContext.createAnalyser();
+            analyser.minDecibels = -90;
+            analyser.maxDecibels = -10;
+            analyser.smoothingTimeConstant = 0.85;
+            
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then(stream => {
                     const source = audioContext.createMediaStreamSource(stream);
                     source.connect(analyser);
                     analyser.fftSize = 32;
                     dataArray = new Uint8Array(analyser.frequencyBinCount);
+                    console.log("Audio initialized successfully");
                 })
-                .catch(err => console.error('Fejl ved adgang til mikrofon:', err));
+                .catch(err => {
+                    console.error('Fejl ved adgang til mikrofon:', err);
+                    alert('Kunne ikke få adgang til mikrofonen. Tjek dine browserindstillinger.');
+                });
         }
 
         function updateParticles() {
@@ -133,9 +157,10 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            if (analyser) {
+            if (analyser && dataArray) {
                 analyser.getByteFrequencyData(dataArray);
                 audioLevel = dataArray.reduce((a, b) => a + b) / dataArray.length;
+                console.log("Current audio level:", audioLevel);
             } else {
                 audioLevel = (audioLevel + Math.random() * 10) % 255;
             }
@@ -143,6 +168,9 @@
             const scale = 1 + audioLevel / 128;
             particles.scale.set(scale, scale, scale);
             lines.scale.set(scale, scale, scale);
+
+            audioIndicator.scale.set(1 + audioLevel / 255, 1 + audioLevel / 255, 1);
+            audioIndicator.material.opacity = audioLevel / 255;
 
             updateParticles();
             renderer.render(scene, camera);
@@ -152,6 +180,7 @@
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+            audioIndicator.position.set(-window.innerWidth / 2 + 30, window.innerHeight / 2 - 30, 0);
         }
 
         function toggleFullScreen() {
