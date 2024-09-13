@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Det Hypersensitive Resonante Rum</title>
+    <title>Dialogens Symfoni</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; }
         canvas { display: block; }
@@ -12,167 +12,145 @@
 <body>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
-        let scene, camera, renderer, particles, lines, audioIndicator;
-        let audioContext, analyser, dataArray;
-        const particleCount = 200;
-        const maxConnections = 5;
-        const connectionDistance = 150;
-        let baseColor = new THREE.Color(0xFFA500);
-        let targetColor = new THREE.Color(0xFFA500);
+        let scene, camera, renderer, particles, lines, audioContext, analyser, dataArray;
+        const particleCount = 150;
+        const maxConnections = 10;
+        const connectionDistance = 30;
         let audioLevel = 0;
+        let time = 0;
 
         function init() {
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            renderer = new THREE.WebGLRenderer();
+            renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000);
             document.body.appendChild(renderer.domElement);
 
-            createParticles();
-            createLines();
-            createAudioIndicator();
-
-            camera.position.z = 500;
+            createParticlesAndLines();
+            camera.position.z = 50;
 
             initAudio();
             animate();
         }
 
-        function createParticles() {
+        function createParticlesAndLines() {
             const geometry = new THREE.BufferGeometry();
             const positions = new Float32Array(particleCount * 3);
-            const colors = new Float32Array(particleCount * 3);
-            const sizes = new Float32Array(particleCount);
+            const velocities = new Float32Array(particleCount * 3);
 
             for (let i = 0; i < particleCount * 3; i += 3) {
-                positions[i] = (Math.random() - 0.5) * 500;
-                positions[i + 1] = (Math.random() - 0.5) * 500;
-                positions[i + 2] = (Math.random() - 0.5) * 500;
-
-                colors[i] = baseColor.r;
-                colors[i + 1] = baseColor.g;
-                colors[i + 2] = baseColor.b;
-
-                sizes[i / 3] = 5;
+                positions[i] = (Math.random() - 0.5) * 100;
+                positions[i + 1] = (Math.random() - 0.5) * 100;
+                positions[i + 2] = (Math.random() - 0.5) * 100;
+                velocities[i] = (Math.random() - 0.5) * 0.2;
+                velocities[i + 1] = (Math.random() - 0.5) * 0.2;
+                velocities[i + 2] = (Math.random() - 0.5) * 0.2;
             }
 
             geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
 
-            const material = new THREE.PointsMaterial({ 
-                size: 5, 
-                vertexColors: true, 
-                sizeAttenuation: true 
+            const material = new THREE.PointsMaterial({
+                color: 0xffffff,
+                size: 0.5,
+                transparent: true,
+                blending: THREE.AdditiveBlending
             });
+
             particles = new THREE.Points(geometry, material);
             scene.add(particles);
-        }
 
-        function createLines() {
-            lines = new THREE.LineSegments(
-                new THREE.BufferGeometry(),
-                new THREE.LineBasicMaterial({ color: baseColor, opacity: 0.5, transparent: true })
-            );
+            const lineMaterial = new THREE.LineBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.2,
+                blending: THREE.AdditiveBlending
+            });
+
+            lines = new THREE.LineSegments(new THREE.BufferGeometry(), lineMaterial);
             scene.add(lines);
-        }
-
-        function createAudioIndicator() {
-            const geometry = new THREE.CircleGeometry(20, 32);
-            const material = new THREE.MeshBasicMaterial({ color: 0xFFA500, transparent: true, opacity: 0.5 });
-            audioIndicator = new THREE.Mesh(geometry, material);
-            audioIndicator.position.set(-window.innerWidth / 2 + 30, window.innerHeight / 2 - 30, 0);
-            scene.add(audioIndicator);
         }
 
         function initAudio() {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
             analyser = audioContext.createAnalyser();
-            analyser.minDecibels = -90;
-            analyser.maxDecibels = -10;
-            analyser.smoothingTimeConstant = 0.85;
-            
+            analyser.fftSize = 256;
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then(stream => {
                     const source = audioContext.createMediaStreamSource(stream);
                     source.connect(analyser);
-                    analyser.fftSize = 32;
-                    dataArray = new Uint8Array(analyser.frequencyBinCount);
-                    console.log("Audio initialized successfully");
                 })
-                .catch(err => {
-                    console.error('Fejl ved adgang til mikrofon:', err);
-                    alert('Kunne ikke få adgang til mikrofonen. Tjek dine browserindstillinger.');
-                });
+                .catch(err => console.error('Fejl ved adgang til mikrofon:', err));
         }
 
-        function updateParticles() {
+        function updateParticlesAndLines() {
             const positions = particles.geometry.attributes.position.array;
-            const colors = particles.geometry.attributes.color.array;
-            const sizes = particles.geometry.attributes.size.array;
+            const velocities = particles.geometry.attributes.velocity.array;
             const linePositions = [];
 
-            targetColor.setHSL(audioLevel / 255, 1, 0.5);
+            time += 0.01;
 
             for (let i = 0; i < positions.length; i += 3) {
-                const connections = [];
-                for (let j = 0; j < positions.length; j += 3) {
-                    if (i !== j) {
-                        const dx = positions[i] - positions[j];
-                        const dy = positions[i + 1] - positions[j + 1];
-                        const dz = positions[i + 2] - positions[j + 2];
-                        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                // Opdater position baseret på hastighed og lydniveau
+                positions[i] += velocities[i] * (1 + audioLevel * 5);
+                positions[i + 1] += velocities[i + 1] * (1 + audioLevel * 5);
+                positions[i + 2] += velocities[i + 2] * (1 + audioLevel * 5);
 
-                        if (distance < connectionDistance) {
-                            connections.push(j);
-                            if (connections.length >= maxConnections) break;
-                        }
+                // Tilføj bølgebevægelse
+                positions[i] += Math.sin(time + i * 0.1) * 0.2;
+                positions[i + 1] += Math.cos(time + i * 0.1) * 0.2;
+
+                // Hold partikler inden for synligt område
+                if (Math.abs(positions[i]) > 50) velocities[i] *= -1;
+                if (Math.abs(positions[i + 1]) > 50) velocities[i + 1] *= -1;
+                if (Math.abs(positions[i + 2]) > 50) velocities[i + 2] *= -1;
+
+                // Opret forbindelser
+                let connections = 0;
+                for (let j = i + 3; j < positions.length; j += 3) {
+                    if (connections >= maxConnections) break;
+
+                    const dx = positions[i] - positions[j];
+                    const dy = positions[i + 1] - positions[j + 1];
+                    const dz = positions[i + 2] - positions[j + 2];
+                    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+                    if (distance < connectionDistance * (1 + audioLevel)) {
+                        linePositions.push(positions[i], positions[i + 1], positions[i + 2]);
+                        linePositions.push(positions[j], positions[j + 1], positions[j + 2]);
+                        connections++;
+
+                        // Tilføj en lille tiltrækning mellem forbundne partikler
+                        const attraction = 0.0001 * (1 + audioLevel * 10);
+                        velocities[i] += (positions[j] - positions[i]) * attraction;
+                        velocities[i + 1] += (positions[j + 1] - positions[i + 1]) * attraction;
+                        velocities[i + 2] += (positions[j + 2] - positions[i + 2]) * attraction;
                     }
                 }
-
-                for (const connection of connections) {
-                    linePositions.push(positions[i], positions[i + 1], positions[i + 2]);
-                    linePositions.push(positions[connection], positions[connection + 1], positions[connection + 2]);
-                }
-
-                const moveFactor = 2 + audioLevel * 0.1;
-                positions[i] += (Math.random() - 0.5) * moveFactor;
-                positions[i + 1] += (Math.random() - 0.5) * moveFactor;
-                positions[i + 2] += (Math.random() - 0.5) * moveFactor;
-
-                colors[i] += (targetColor.r - colors[i]) * 0.1;
-                colors[i + 1] += (targetColor.g - colors[i + 1]) * 0.1;
-                colors[i + 2] += (targetColor.b - colors[i + 2]) * 0.1;
-
-                sizes[i / 3] = 5 + audioLevel * 0.2;
             }
 
             particles.geometry.attributes.position.needsUpdate = true;
-            particles.geometry.attributes.color.needsUpdate = true;
-            particles.geometry.attributes.size.needsUpdate = true;
+            particles.geometry.attributes.velocity.needsUpdate = true;
             lines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
-            lines.material.color.lerp(targetColor, 0.1);
         }
 
         function animate() {
             requestAnimationFrame(animate);
 
-            if (analyser && dataArray) {
+            if (analyser) {
                 analyser.getByteFrequencyData(dataArray);
-                audioLevel = dataArray.reduce((a, b) => a + b) / dataArray.length;
-                console.log("Current audio level:", audioLevel);
-            } else {
-                audioLevel = (audioLevel + Math.random() * 10) % 255;
+                audioLevel = dataArray.reduce((a, b) => a + b) / dataArray.length / 255;
             }
 
-            const scale = 1 + audioLevel / 128;
-            particles.scale.set(scale, scale, scale);
-            lines.scale.set(scale, scale, scale);
+            // Tilpas partikel- og linjestørrelse baseret på lydniveau
+            particles.material.size = 0.5 + audioLevel * 3;
+            lines.material.opacity = 0.1 + audioLevel * 0.9;
 
-            audioIndicator.scale.set(1 + audioLevel / 255, 1 + audioLevel / 255, 1);
-            audioIndicator.material.opacity = audioLevel / 255;
+            updateParticlesAndLines();
 
-            updateParticles();
             renderer.render(scene, camera);
         }
 
@@ -180,7 +158,6 @@
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-            audioIndicator.position.set(-window.innerWidth / 2 + 30, window.innerHeight / 2 - 30, 0);
         }
 
         function toggleFullScreen() {
